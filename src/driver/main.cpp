@@ -1,0 +1,209 @@
+#include "ferrum/Lexer.h"
+#include "ferrum/Parser.h"
+#include "ferrum/BorrowChecker.h"
+#include "ferrum/TypeChecker.h"
+#include "ferrum/Codegen.h"
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <cstdlib>   // system()
+#include <filesystem>
+
+// ─── Error printing ───────────────────────────────────────────────────────────
+
+static void printBorrowErrors(const std::vector<ferrum::BorrowError>& errors) {
+    for (auto& e : errors) {
+        std::string kind;
+        switch (e.kind) {
+            case ferrum::BorrowError::Kind::UseAfterMove:              kind = "E0382"; break;
+            case ferrum::BorrowError::Kind::UseAfterFree:              kind = "E0505"; break;
+            case ferrum::BorrowError::Kind::MutableBorrowWhileBorrowed:kind = "E0502"; break;
+            case ferrum::BorrowError::Kind::MutateWhileBorrowed:       kind = "E0596"; break;
+            case ferrum::BorrowError::Kind::BorrowOutlivesOwner:       kind = "E0597"; break;
+            case ferrum::BorrowError::Kind::UnsafeOutsideUnsafeBlock:  kind = "E0133"; break;
+            default:                                                    kind = "E????"; break;
+        }
+        std::cerr << "error[" << kind << "] line " << e.line
+                  << ": " << e.message << "\n";
+    }
+}
+
+static void printTypeErrors(const std::vector<ferrum::TypeChecker::TypeError>& errors) {
+    for (auto& e : errors)
+        std::cerr << "error[type] line " << e.line << ": " << e.message << "\n";
+}
+
+static void printCodegenErrors(const std::vector<ferrum::Codegen::CodegenError>& errors) {
+    for (auto& e : errors)
+        std::cerr << "error[codegen] line " << e.line << ": " << e.message << "\n";
+}
+
+// ─── Compile a single file ────────────────────────────────────────────────────
+
+static int runFile(const std::string& path, bool emitIR, const std::string& outputBin) {
+    // Read source
+    std::ifstream f(path);
+    if (!f) { std::cerr << "Cannot open file: " << path << "\n"; return 1; }
+    std::ostringstream buf; buf << f.rdbuf();
+    std::string src = buf.str();
+
+    bool hasErrors = false;
+
+    try {
+        // ── 1. Lex ────────────────────────────────────────────────────────────
+        ferrum::Lexer lexer(src, path);
+        auto tokens = lexer.tokenize();
+
+        // ── 2. Parse ──────────────────────────────────────────────────────────
+        ferrum::Parser parser(tokens);
+        auto program = parser.parse();
+
+        // ── 3. Type Check (Sema) ──────────────────────────────────────────────
+        ferrum::TypeChecker tc;
+        tc.check(program);
+        if (!tc.errors.empty()) {
+            printTypeErrors(tc.errors);
+            std::cerr << tc.errors.size() << " type error(s).\n";
+            hasErrors = true;
+        }
+
+        // ── 4. Borrow Check ───────────────────────────────────────────────────
+        ferrum::BorrowChecker bc;
+        bc.check(program);
+        if (!bc.errors.empty()) {
+            printBorrowErrors(bc.errors);
+            std::cerr << bc.errors.size() << " borrow error(s).\n";
+            hasErrors = true;
+        }
+
+        if (hasErrors) {
+            std::cerr << "\nCompilation failed.\n";
+            return 1;
+        }
+
+        // ── 5. Codegen (LLVM IR) ──────────────────────────────────────────────
+        std::string moduleName = std::filesystem::path(path).stem().string();
+        ferrum::Codegen cg(moduleName, tc);
+        cg.generate(program);
+
+        if (!cg.errors.empty()) {
+            printCodegenErrors(cg.errors);
+            std::cerr << cg.errors.size() << " codegen error(s).\n";
+            // Don't abort — some are warnings (e.g. generic codegen not yet supported)
+        }
+
+        if (emitIR) {
+            std::cout << cg.getIR();
+            return 0;
+        }
+
+        // Write IR to a temp file
+        std::string irPath = "/tmp/ferrum_" + moduleName + ".ll";
+        if (!cg.writeIR(irPath)) {
+            std::cerr << "Failed to write IR to " << irPath << "\n";
+            return 1;
+        }
+
+        // ── 6. Compile IR → binary using llc + gcc ────────────────────────────
+        std::string outPath = outputBin.empty() ? ("./" + moduleName) : outputBin;
+        std::string objPath = "/tmp/ferrum_" + moduleName + ".o";
+
+        // Try clang first, fall back to llc + gcc
+        std::string clangCmd = "clang " + irPath + " -o " + outPath + " -lm 2>/dev/null";
+        std::string llcCmd   = "llc -filetype=obj -relocation-model=pic " + irPath + " -o " + objPath + " 2>&1";
+        std::string gccCmd   = "gcc -fPIE " + objPath + " -o " + outPath + " -lm 2>&1";
+
+        int ret = std::system(clangCmd.c_str());
+        if (ret != 0) {
+            // clang not found — use llc + gcc
+            ret = std::system(llcCmd.c_str());
+            if (ret != 0) {
+                std::cerr << "llc failed with exit code " << ret << "\n";
+                return 1;
+            }
+            ret = std::system(gccCmd.c_str());
+            if (ret != 0) {
+                std::cerr << "gcc failed with exit code " << ret << "\n";
+                return 1;
+            }
+        }
+
+        std::cout << "✓ " << path << " → " << outPath << "\n";
+        return 0;
+
+    } catch (const ferrum::ParseError& pe) {
+        std::cerr << "parse error: " << pe.what() << "\n";
+        return 1;
+    }
+}
+
+// ─── REPL ─────────────────────────────────────────────────────────────────────
+
+static void runRepl() {
+    std::cout << "REPL mode. Type Ferrum code, end with a blank line.\n\n";
+    while (true) {
+        std::string line, src;
+        std::cout << "fe> ";
+        while (std::getline(std::cin, line)) {
+            if (line.empty()) break;
+            src += line + "\n";
+            std::cout << "    ";
+        }
+        if (src.empty()) break;
+        try {
+            ferrum::Lexer lexer(src, "<repl>");
+            auto tokens = lexer.tokenize();
+            ferrum::Parser parser(tokens);
+            auto program = parser.parse();
+
+            ferrum::TypeChecker tc;
+            tc.check(program);
+            if (!tc.errors.empty()) { printTypeErrors(tc.errors); continue; }
+
+            ferrum::BorrowChecker bc;
+            bc.check(program);
+            if (!bc.errors.empty()) { printBorrowErrors(bc.errors); continue; }
+
+            std::cout << "✓ OK (sema + borrow check passed)\n";
+        } catch (const ferrum::ParseError& e) {
+            std::cerr << "parse error: " << e.what() << "\n";
+        }
+    }
+}
+
+// ─── main ─────────────────────────────────────────────────────────────────────
+
+int main(int argc, char* argv[]) {
+    std::cout << "Ferrum Compiler v0.2\n";
+    std::cout << "Syntax: C | Safety: compile-time checked | Ecosystem: C++\n";
+    std::cout << "─────────────────────────────────────────\n";
+
+    if (argc < 2) {
+        runRepl();
+        return 0;
+    }
+
+    std::string inputFile;
+    std::string outputBin;
+    bool emitIR = false;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--emit-ir" || arg == "--emit-llvm") {
+            emitIR = true;
+        } else if ((arg == "-o") && i+1 < argc) {
+            outputBin = argv[++i];
+        } else if (arg[0] != '-') {
+            inputFile = arg;
+        }
+    }
+
+    if (inputFile.empty()) {
+        std::cerr << "Usage: ferrumc <file.fe> [--emit-ir] [-o output]\n";
+        return 1;
+    }
+
+    return runFile(inputFile, emitIR, outputBin);
+}

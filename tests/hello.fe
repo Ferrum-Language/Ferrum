@@ -1,0 +1,21 @@
+// hello.fe — First Ferrum program
+// Syntax: C | Safety: compile-time checked | Ecosystem: C++
+
+import <stdio.h>;
+
+int main() {
+    // Stack variable — copied automatically
+    int x = 42;
+    int& borrow_x = &x;     // immutable borrow — OK
+
+    // Heap allocation — compiler inserts free() at end of scope
+    int* p = new int(100);
+    int* q = move(p);        // p is now invalid, q is the new owner
+    // int* bad = move(p);   // ERROR: use of moved value 'p'
+
+    printf("x = %d\n", x);
+    printf("q = %d\n", *q);
+    // q is freed here automatically
+
+    return 0;
+}

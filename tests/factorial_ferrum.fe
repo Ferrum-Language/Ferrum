@@ -1,0 +1,33 @@
+// factorial_ferrum.fe — C e Ferrum al mismo tiempo
+// #include funciona igual que import
+#include <stdio.h>
+
+int factorial(int n) {
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+int main() {
+    // Heap allocation — se libera automaticamente
+    int* limite = new int(7);
+
+    printf("Factoriales del 1 al %d:\n", *limite);
+    printf("──────────────────────\n");
+
+    for (int i = 1; i <= *limite; i = i + 1) {
+        printf("%d! = %d\n", i, factorial(i));
+    }
+
+    printf("──────────────────────\n");
+
+    // Move: transfiere ownership — limite queda invalido
+    int* otro = move(limite);
+    printf("Limite fue: %d\n", *otro);
+    // otro se libera aqui automaticamente
+
+    // --- Si descomentaras la siguiente linea, el compilador la rechazaria: ---
+    // printf("limite = %d\n", *limite);
+    // error[E0382]: use of moved value 'limite'
+
+    return 0;
+}

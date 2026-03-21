@@ -1,0 +1,31 @@
+// counter.fe — Programa simple en Ferrum
+// Muestra un contador con bucle for y manejo de memoria
+
+import <stdio.h>;
+
+int sumar(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    printf("=== Contador Ferrum ===\n");
+
+    // Variables en el stack
+    int total = 0;
+
+    // Bucle for
+    for (int i = 0; i < 5; i = i + 1) {
+        total = sumar(total, i);
+        printf("i = %d  |  total = %d\n", i, total);
+    }
+
+    printf("----------------------\n");
+    printf("Total final: %d\n", total);
+
+    // Heap allocation con ownership
+    int* p = new int(99);
+    printf("Valor en heap: %d\n", *p);
+    // p se libera automaticamente aqui (free() insertado por el compilador)
+
+    return 0;
+}

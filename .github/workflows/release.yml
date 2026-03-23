@@ -161,6 +161,12 @@ jobs:
     name: Create Release
     needs: [build-linux, build-macos, build-windows, build-freebsd]
     runs-on: ubuntu-22.04
+    if: |
+      always() &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-freebsd.result == 'success' &&
+      (needs.build-macos.result == 'success' || needs.build-macos.result == 'cancelled' || needs.build-macos.result == 'failure')
     steps:
       - uses: actions/download-artifact@v4
         with:

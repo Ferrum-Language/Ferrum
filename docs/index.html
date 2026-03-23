@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ferrum-language — Systems programming with compile-time memory safety</title>
+  <meta name="description" content="Ferrum-language: C syntax, Rust-style memory safety, LLVM-compiled. No garbage collector, no runtime, no data races." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>" />
+  <style>
+    :root {
+      --bg:        #0d0f14;
+      --bg2:       #13161e;
+      --bg3:       #1a1e2a;
+      --border:    #252a38;
+      --accent:    #e07b39;
+      --accent2:   #c45f1e;
+      --text:      #e8eaf0;
+      --text2:     #9aa3b8;
+      --green:     #4ec9a0;
+      --red:       #e06c75;
+      --blue:      #61afef;
+      --yellow:    #e5c07b;
+      --purple:    #c678dd;
+      --radius:    8px;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+    }
+
+    /* ── NAV ──────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,15,20,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 2rem; height: 60px; gap: 2rem;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: .6rem;
+      font-weight: 700; font-size: 1.1rem; color: var(--text);
+      text-decoration: none;
+    }
+    .nav-logo svg { color: var(--accent); }
+    .nav-links { display: flex; gap: 1.6rem; margin-left: auto; }
+    .nav-links a {
+      color: var(--text2); text-decoration: none;
+      font-size: .9rem; font-weight: 500;
+      transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--accent); color: #fff !important;
+      padding: .4rem 1rem; border-radius: var(--radius);
+      transition: background .2s !important;
+    }
+    .nav-cta:hover { background: var(--accent2) !important; }
+
+    /* ── HERO ─────────────────────────────────────── */
+    #home {
+      min-height: calc(100vh - 60px);
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 4rem 2rem;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, #1e2235 0%, var(--bg) 70%);
+    }
+    .hero-inner { max-width: 760px; }
+    .hero-badge {
+      display: inline-block;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--accent); font-size: .8rem; font-weight: 600;
+      padding: .25rem .9rem; border-radius: 999px; margin-bottom: 1.6rem;
+      letter-spacing: .05em; text-transform: uppercase;
+    }
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800; line-height: 1.15; margin-bottom: 1.2rem;
+    }
+    h1 span { color: var(--accent); }
+    .hero-sub {
+      font-size: 1.15rem; color: var(--text2);
+      max-width: 560px; margin: 0 auto 2.4rem;
+    }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .7rem 1.6rem; border-radius: var(--radius);
+      font-weight: 600; font-size: .95rem; text-decoration: none;
+      transition: all .2s; cursor: pointer; border: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-secondary {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg3); transform: translateY(-1px); }
+
+    /* ── CODE PREVIEW ─────────────────────────────── */
+    .code-preview {
+      margin: 3rem auto 0; max-width: 660px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; text-align: left;
+    }
+    .code-bar {
+      background: var(--bg3); border-bottom: 1px solid var(--border);
+      padding: .6rem 1rem; display: flex; align-items: center; gap: .5rem;
+    }
+    .code-bar span { font-size: .82rem; color: var(--text2); margin-left: .4rem; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+    pre {
+      padding: 1.4rem 1.6rem; font-family: var(--font-mono);
+      font-size: .85rem; line-height: 1.8; overflow-x: auto;
+    }
+    .kw  { color: var(--purple); }
+    .ty  { color: var(--blue); }
+    .fn  { color: var(--green); }
+    .str { color: var(--yellow); }
+    .cmt { color: #5c6370; font-style: italic; }
+    .num { color: var(--accent); }
+
+    /* ── FEATURES ─────────────────────────────────── */
+    #info { background: var(--bg2); padding: 5rem 2rem; }
+    section { max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: .8rem; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: .8rem;
+    }
+    h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; margin-bottom: 1rem; }
+    .section-sub { color: var(--text2); max-width: 540px; margin-bottom: 3rem; }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.2rem;
+    }
+    .feature-card {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.6rem;
+      transition: border-color .2s, transform .2s;
+    }
+    .feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .feature-icon { font-size: 1.8rem; margin-bottom: .8rem; }
+    .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: .4rem; }
+    .feature-card p { font-size: .875rem; color: var(--text2); line-height: 1.6; }
+
+    /* ── DOWNLOAD ─────────────────────────────────── */
+    #download { padding: 5rem 2rem; }
+    .os-tabs {
+      display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 2rem;
+    }
+    .os-tab {
+      display: flex; align-items: center; gap: .5rem;
+      background: var(--bg2); border: 1px solid var(--border);
+      color: var(--text2); padding: .5rem 1.2rem;
+      border-radius: var(--radius); cursor: pointer;
+      font-size: .9rem; font-weight: 500; transition: all .2s;
+      user-select: none;
+    }
+    .os-tab.active, .os-tab:hover {
+      background: var(--bg3); border-color: var(--accent); color: var(--text);
+    }
+    .os-tab.active { border-color: var(--accent); }
+
+    .os-panel { display: none; }
+    .os-panel.active { display: block; }
+
+    .dl-method {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.6rem; margin-bottom: 1.2rem;
+    }
+    .dl-method h3 {
+      font-size: 1rem; font-weight: 700; margin-bottom: .3rem;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .dl-method p { font-size: .875rem; color: var(--text2); margin-bottom: .8rem; }
+    .code-block {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .7rem 1rem;
+      font-family: var(--font-mono); font-size: .85rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .copy-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--text2); padding: .25rem .6rem;
+      border-radius: 4px; cursor: pointer; font-size: .75rem;
+      transition: all .15s; white-space: nowrap; flex-shrink: 0;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--green); color: var(--green); }
+
+    .dl-btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: var(--accent); color: #fff;
+      padding: .6rem 1.4rem; border-radius: var(--radius);
+      font-weight: 600; font-size: .9rem; text-decoration: none;
+      transition: background .2s; margin-top: .5rem;
+    }
+    .dl-btn:hover { background: var(--accent2); }
+
+    .method-badge {
+      font-size: .7rem; font-weight: 600; padding: .15rem .5rem;
+      border-radius: 999px; letter-spacing: .04em;
+    }
+    .badge-recommended { background: #1a3a2a; color: var(--green); }
+    .badge-package     { background: #1e2a3a; color: var(--blue); }
+    .badge-binary      { background: #2a1e3a; color: var(--purple); }
+
+    /* ── FOOTER ───────────────────────────────────── */
+    footer {
+      background: var(--bg2); border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem; text-align: center;
+      color: var(--text2); font-size: .875rem;
+    }
+    footer a { color: var(--text2); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+    .footer-links { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap; }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-links { gap: 1rem; }
+      h1 { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ───────────────────────────────────────────── -->
+<nav>
+  <a class="nav-logo" href="#home">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+    </svg>
+    Ferrum-language
+  </a>
+  <div class="nav-links">
+    <a href="#home">Home</a>
+    <a href="#info">About</a>
+    <a href="#download">Download</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum" target="_blank">GitHub</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum/tree/main/docs/SPEC.md" target="_blank">Spec</a>
+    <a href="#download" class="nav-cta">Get started</a>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────── -->
+<section id="home">
+  <div class="hero-inner">
+    <div class="hero-badge">v0.3.0 — now available</div>
+    <h1>Systems programming with<br><span>compile-time memory safety</span></h1>
+    <p class="hero-sub">
+      Ferrum-language gives you C's familiar syntax and LLVM-compiled performance,
+      with Rust-style ownership and borrow checking — no garbage collector, no runtime, no data races.
+    </p>
+    <div class="hero-buttons">
+      <a href="#download" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/Ferrum-Language/Ferrum" target="_blank" class="btn btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        View on GitHub
+      </a>
+      <a href="https://github.com/Ferrum-Language/Ferrum/tree/main/docs/SPEC.md" target="_blank" class="btn btn-secondary">
+        Read the spec
+      </a>
+    </div>
+
+    <div class="code-preview">
+      <div class="code-bar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span>borrows.fe</span>
+      </div>
+      <pre><span class="cmt">// Compile-time memory safety — no runtime cost</span>
+<span class="kw">#include</span> <span class="str">&lt;stdio.h&gt;</span>
+
+<span class="ty">int</span> <span class="fn">main</span>() {
+    <span class="ty">int</span> x = <span class="num">10</span>;
+
+    {
+        <span class="ty">int</span>&amp; reader = &amp;x;          <span class="cmt">// immutable borrow</span>
+        <span class="fn">printf</span>(<span class="str">"read: %d\n"</span>, *reader);
+    }   <span class="cmt">// borrow released here</span>
+
+    <span class="ty">int</span>&amp;<span class="kw">mut</span> writer = &amp;<span class="kw">mut</span> x;   <span class="cmt">// mutable borrow — safe</span>
+    *writer = <span class="num">99</span>;
+    <span class="fn">printf</span>(<span class="str">"after write: %d\n"</span>, x);
+
+    <span class="kw">return</span> <span class="num">0</span>;
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ── ABOUT / FEATURES ───────────────────────────────── -->
+<div id="info">
+<section>
+  <p class="section-label">About</p>
+  <h2>Why Ferrum-language?</h2>
+  <p class="section-sub">
+    Modern systems programming should not force you to choose between memory safety and a familiar syntax.
+    Ferrum-language gives you both.
+  </p>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <h3>Compile-time memory safety</h3>
+      <p>Ownership, borrow checking, and move semantics catch use-after-free, dangling pointers, and data races before your program ever runs.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Zero-cost abstractions</h3>
+      <p>No garbage collector, no reference counting, no runtime. Safety guarantees are enforced entirely at compile time — zero overhead at runtime.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧠</div>
+      <h3>Familiar C syntax</h3>
+      <p>If you know C, you already know most of Ferrum. Structs, pointers, functions — same syntax, safer semantics. No steep learning curve.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🏗️</div>
+      <h3>LLVM 18 backend</h3>
+      <p>Compiles to native machine code via LLVM 18. Full optimization pipeline — the same backend used by Clang and Rust.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔀</div>
+      <h3>Ownership &amp; move semantics</h3>
+      <p>Resources have a single owner. Transfer ownership with <code>move()</code>, heap-allocate with <code>new</code>. Memory is freed automatically at scope end.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🚧</div>
+      <h3>Opt-in unsafe</h3>
+      <p>Need raw pointer arithmetic or FFI? Wrap it in an <code>unsafe { }</code> block. The borrow checker flags any unsafe operation outside of one.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔗</div>
+      <h3>C interoperability</h3>
+      <p>Import any C header with <code>#include</code>. Call libc directly. Ferrum compiles to the same ABI, so mixing C and Ferrum is seamless.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📦</div>
+      <h3>No hidden dependencies</h3>
+      <p>A single <code>ferrumc</code> binary is all you need. Point it at a <code>.fe</code> file and get a native binary. No linker scripts, no build system required.</p>
+    </div>
+  </div>
+</section>
+</div>
+
+<!-- ── DOWNLOAD ────────────────────────────────────────── -->
+<section id="download">
+  <p class="section-label">Download</p>
+  <h2>Install Ferrum-language</h2>
+  <p class="section-sub">Choose your operating system. All binaries are built from the same source and verified with SHA-256 checksums.</p>
+
+  <div class="os-tabs">
+    <div class="os-tab active" onclick="showOS('linux')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 0C9.1 0 6.4 2.8 6.4 6.2c0 1.1.3 2.1.8 3-1.4.7-3.3 2.3-4.2 5.4-.9 3.1-.2 5.4 1.4 6.6 1.6 1.2 3.6.9 5-.3.9-.8 1.9-1 2.8-.9.9.1 1.9.4 2.8 1.1 1.3 1 3.2 1.2 4.8.1 1.6-1.1 2.4-3.4 1.6-6.5-.8-3.1-2.6-4.7-4-5.4.5-.9.8-2 .8-3.1C17.6 2.8 14.9 0 12.5 0zm0 1.5c2.6 0 4.6 2.1 4.6 4.7 0 2.6-2.1 4.7-4.6 4.7S7.9 8.8 7.9 6.2c0-2.6 2-4.7 4.6-4.7z"/></svg>
+      Linux
+    </div>
+    <div class="os-tab" onclick="showOS('macos')">
+      <svg width="16" height="16" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 790.9 0 694.3 0 602.1c0-158.4 103.7-242.6 205.5-242.6 54.3 0 99.7 36.7 134.2 36.7 32.6 0 84.1-39.2 147.6-39.2 23.5 0 108.2 2 162.3 80.3zM528.3 136.6c24.5-29.2 41.7-69.5 41.7-109.8 0-5.5-.5-11.1-1.5-15.4-39.5 1.5-87 26.3-115.3 57.8-22 23.8-42 64.2-42 104.5 0 6.1.8 12.1 1.5 14 2.4.5 6.3 1 10.2 1 35.6 0 79.6-23.6 105.4-52.1z"/></svg>
+      macOS
+    </div>
+    <div class="os-tab" onclick="showOS('windows')">
+      <svg width="16" height="16" viewBox="0 0 88 88" fill="currentColor"><path d="M0 12.4L35.7 7.6V42H0zm40.3-5.5L88 0v42H40.3zM0 46h35.7v34.4L0 75.6zm40.3.8H88V88L40.3 81.3z"/></svg>
+      Windows
+    </div>
+    <div class="os-tab" onclick="showOS('bsd')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+      BSD
+    </div>
+  </div>
+
+  <!-- ── LINUX ── -->
+  <div id="os-linux" class="os-panel active">
+
+    <div class="dl-method">
+      <h3>Direct download <span class="method-badge badge-recommended">Recommended</span></h3>
+      <p>Single static binary. Extract and run — no installation required.</p>
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-linux-x86_64.tar.gz">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Linux x86_64 (.tar.gz)
+      </a>
+      &nbsp;
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-linux-aarch64.tar.gz" style="background:#555">
+        Linux aarch64 (.tar.gz)
+      </a>
+      <div class="code-block" style="margin-top:1rem">
+        <code>tar -xzf ferrumc-*-linux-x86_64.tar.gz &amp;&amp; sudo mv ferrumc /usr/local/bin/</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Debian / Ubuntu / Mint <span class="method-badge badge-package">apt</span></h3>
+      <p>Works on any system that uses <code>apt</code> and <code>dpkg</code>.</p>
+      <div class="code-block">
+        <code>curl -fsSL https://pkg.ferrum-lang.org/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/ferrum.gpg<br>
+echo "deb [signed-by=/etc/apt/keyrings/ferrum.gpg] https://pkg.ferrum-lang.org/apt stable main" | sudo tee /etc/apt/sources.list.d/ferrum.list<br>
+sudo apt update &amp;&amp; sudo apt install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Fedora / RHEL / CentOS / Rocky <span class="method-badge badge-package">dnf / rpm</span></h3>
+      <p>Works on any RPM-based distribution using <code>dnf</code> or <code>yum</code>.</p>
+      <div class="code-block">
+        <code>sudo dnf config-manager --add-repo https://pkg.ferrum-lang.org/rpm/ferrum.repo<br>
+sudo dnf install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Arch Linux / Manjaro <span class="method-badge badge-package">pacman / AUR</span></h3>
+      <div class="code-block">
+        <code>yay -S ferrumc    # via AUR (community-maintained)</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>openSUSE <span class="method-badge badge-package">zypper</span></h3>
+      <div class="code-block">
+        <code>sudo zypper addrepo https://pkg.ferrum-lang.org/rpm/ferrum.repo ferrum<br>
+sudo zypper install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Snap <span class="method-badge badge-package">snap</span></h3>
+      <p>Works on any distribution with <code>snapd</code> installed (Ubuntu, Fedora, Arch...).</p>
+      <div class="code-block">
+        <code>sudo snap install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Flatpak / Flathub <span class="method-badge badge-package">flatpak</span></h3>
+      <p>Runs sandboxed on any distribution with Flatpak support.</p>
+      <div class="code-block">
+        <code>flatpak install flathub org.ferrum_lang.ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>NixOS / nix-env <span class="method-badge badge-package">nix</span></h3>
+      <div class="code-block">
+        <code>nix-env -iA nixpkgs.ferrumc    # or add ferrumc to environment.systemPackages</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── MACOS ── -->
+  <div id="os-macos" class="os-panel">
+
+    <div class="dl-method">
+      <h3>Homebrew <span class="method-badge badge-recommended">Recommended</span></h3>
+      <p>Works on both Intel and Apple Silicon Macs.</p>
+      <div class="code-block">
+        <code>brew tap ferrum-language/tap &amp;&amp; brew install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>MacPorts <span class="method-badge badge-package">port</span></h3>
+      <div class="code-block">
+        <code>sudo port install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Direct download <span class="method-badge badge-binary">binary</span></h3>
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-macos-arm64.tar.gz">
+        macOS arm64 — Apple Silicon
+      </a>
+      &nbsp;
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-macos-x86_64.tar.gz" style="background:#555">
+        macOS x86_64 — Intel
+      </a>
+      <div class="code-block" style="margin-top:1rem">
+        <code>tar -xzf ferrumc-*-macos-*.tar.gz &amp;&amp; sudo mv ferrumc /usr/local/bin/</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── WINDOWS ── -->
+  <div id="os-windows" class="os-panel">
+
+    <div class="dl-method">
+      <h3>winget <span class="method-badge badge-recommended">Recommended</span></h3>
+      <p>Built into Windows 10/11. No extra tools needed.</p>
+      <div class="code-block">
+        <code>winget install FerumLanguage.ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Chocolatey <span class="method-badge badge-package">choco</span></h3>
+      <div class="code-block">
+        <code>choco install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Scoop <span class="method-badge badge-package">scoop</span></h3>
+      <div class="code-block">
+        <code>scoop bucket add ferrum https://github.com/Ferrum-Language/scoop-bucket<br>
+scoop install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Direct download <span class="method-badge badge-binary">binary</span></h3>
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-windows-x86_64.zip">
+        Windows x86_64 (.zip)
+      </a>
+      <p style="margin-top:.6rem;font-size:.8rem;color:var(--text2)">Extract and add the folder to your PATH, or run <code>ferrumc.exe</code> directly.</p>
+    </div>
+
+  </div>
+
+  <!-- ── BSD ── -->
+  <div id="os-bsd" class="os-panel">
+
+    <div class="dl-method">
+      <h3>FreeBSD — pkg <span class="method-badge badge-recommended">Recommended</span></h3>
+      <div class="code-block">
+        <code>pkg install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>FreeBSD — Ports <span class="method-badge badge-package">ports</span></h3>
+      <div class="code-block">
+        <code>cd /usr/ports/lang/ferrumc &amp;&amp; make install clean</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>OpenBSD — pkg_add <span class="method-badge badge-package">pkg_add</span></h3>
+      <div class="code-block">
+        <code>pkg_add ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>NetBSD — pkgsrc <span class="method-badge badge-package">pkgsrc</span></h3>
+      <div class="code-block">
+        <code>cd /usr/pkgsrc/lang/ferrumc &amp;&amp; make install clean</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>DragonFly BSD <span class="method-badge badge-package">dports</span></h3>
+      <div class="code-block">
+        <code>pkg install ferrumc</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+    <div class="dl-method">
+      <h3>Direct download <span class="method-badge badge-binary">binary</span></h3>
+      <a class="dl-btn" href="https://github.com/Ferrum-Language/Ferrum/releases/latest/download/ferrumc-v0.3.0-freebsd-x86_64.tar.gz">
+        FreeBSD x86_64 (.tar.gz)
+      </a>
+      <div class="code-block" style="margin-top:1rem">
+        <code>tar -xzf ferrumc-*-freebsd-x86_64.tar.gz &amp;&amp; install -m 755 ferrumc /usr/local/bin/</code>
+        <button class="copy-btn" onclick="copy(this)">Copy</button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────── -->
+<footer>
+  <div class="footer-links">
+    <a href="https://github.com/Ferrum-Language/Ferrum" target="_blank">GitHub</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum/tree/main/docs/SPEC.md" target="_blank">Language Spec</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum-Examples" target="_blank">Examples</a>
+    <a href="https://github.com/orgs/Ferrum-Language/discussions" target="_blank">Discussions</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum/issues" target="_blank">Issues</a>
+    <a href="https://github.com/Ferrum-Language/Ferrum/releases" target="_blank">Releases</a>
+  </div>
+  <p>Ferrum-language Compiler v0.3 &mdash; LLVM 18 &mdash; MIT License</p>
+</footer>
+
+<script>
+  function showOS(os) {
+    document.querySelectorAll('.os-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.os-panel').forEach(p => p.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById('os-' + os).classList.add('active');
+  }
+
+  function copy(btn) {
+    const code = btn.previousElementSibling.innerText;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  // Auto-detect OS and highlight the right tab
+  (function() {
+    const ua = navigator.userAgent;
+    let os = 'linux';
+    if (/Windows/i.test(ua)) os = 'windows';
+    else if (/Mac/i.test(ua)) os = 'macos';
+    else if (/FreeBSD|OpenBSD|NetBSD/i.test(ua)) os = 'bsd';
+    const tabs = document.querySelectorAll('.os-tab');
+    const osMap = { linux: 0, macos: 1, windows: 2, bsd: 3 };
+    tabs.forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.os-panel').forEach(p => p.classList.remove('active'));
+    tabs[osMap[os]].classList.add('active');
+    document.getElementById('os-' + os).classList.add('active');
+  })();
+</script>
+</body>
+</html>

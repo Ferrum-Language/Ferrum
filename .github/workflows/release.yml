@@ -1,0 +1,192 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 18
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update -q
+          sudo apt-get install -y llvm-18-dev libclang-18-dev clang-18 cmake ninja-build
+
+      - name: Build
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR=$(llvm-config-18 --cmakedir)
+          cmake --build build --target ferrumc -j$(nproc)
+          strip build/ferrumc
+
+      - name: Package
+        run: |
+          TAG=${GITHUB_REF_NAME:-v0.3.0}
+          tar -czf ferrumc-${TAG}-linux-${{ matrix.arch }}.tar.gz -C build ferrumc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: ferrumc-*.tar.gz
+
+  build-macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-13
+          - arch: arm64
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 18
+        run: brew install llvm@18 cmake ninja
+
+      - name: Build
+        run: |
+          export LLVM_DIR=$(brew --prefix llvm@18)/lib/cmake/llvm
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_DIR=$LLVM_DIR
+          cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
+          strip build/ferrumc
+
+      - name: Package
+        run: |
+          TAG=${GITHUB_REF_NAME:-v0.3.0}
+          tar -czf ferrumc-${TAG}-macos-${{ matrix.arch }}.tar.gz -C build ferrumc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: ferrumc-*.tar.gz
+
+  build-windows:
+    name: Windows x86_64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM 18
+        run: |
+          choco install llvm --version=18.1.8 -y
+          choco install cmake ninja -y
+
+      - name: Build
+        shell: cmd
+        run: |
+          set PATH=C:\Program Files\LLVM\bin;%PATH%
+          cmake -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DLLVM_DIR="C:\Program Files\LLVM\lib\cmake\llvm"
+          cmake --build build --target ferrumc -j%NUMBER_OF_PROCESSORS%
+
+      - name: Package
+        shell: bash
+        run: |
+          TAG=${GITHUB_REF_NAME:-v0.3.0}
+          7z a ferrumc-${TAG}-windows-x86_64.zip ./build/ferrumc.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: ferrumc-*.zip
+
+  build-freebsd:
+    name: FreeBSD x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y llvm18 cmake ninja
+          run: |
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_DIR=/usr/local/llvm18/lib/cmake/llvm
+            cmake --build build --target ferrumc -j$(sysctl -n hw.ncpu)
+            strip build/ferrumc
+
+      - name: Package
+        run: |
+          TAG=${GITHUB_REF_NAME:-v0.3.0}
+          tar -czf ferrumc-${TAG}-freebsd-x86_64.tar.gz -C build ferrumc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-x86_64
+          path: ferrumc-*.tar.gz
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-macos, build-windows, build-freebsd]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Ferrum-language ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          body: |
+            ## Ferrum-language ${{ github.ref_name }}
+
+            Systems programming language with C syntax and compile-time memory safety via a borrow checker and ownership system — compiled to native code through LLVM 18.
+
+            ### Downloads
+
+            | Platform | Architecture | File |
+            |----------|-------------|------|
+            | Linux | x86_64 | `ferrumc-*-linux-x86_64.tar.gz` |
+            | Linux | aarch64 | `ferrumc-*-linux-aarch64.tar.gz` |
+            | macOS | x86_64 (Intel) | `ferrumc-*-macos-x86_64.tar.gz` |
+            | macOS | arm64 (Apple Silicon) | `ferrumc-*-macos-arm64.tar.gz` |
+            | Windows | x86_64 | `ferrumc-*-windows-x86_64.zip` |
+            | FreeBSD | x86_64 | `ferrumc-*-freebsd-x86_64.tar.gz` |
+
+            Verify integrity with `SHA256SUMS.txt`.
+
+            ### Quick start
+            ```bash
+            tar -xzf ferrumc-*-linux-x86_64.tar.gz
+            ./ferrumc hello.fe -o hello
+            ./hello
+            ```
+          files: artifacts/*

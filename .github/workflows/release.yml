@@ -112,7 +112,8 @@ jobs:
           cmake -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_C_COMPILER="%LLVM_PATH%\bin\clang.exe" ^
-            -DCMAKE_CXX_COMPILER="%LLVM_PATH%\bin\clang++.exe"
+            -DCMAKE_CXX_COMPILER="%LLVM_PATH%\bin\clang++.exe" ^
+            -DCMAKE_CXX_FLAGS="-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH"
           cmake --build build --target ferrumc -j%NUMBER_OF_PROCESSORS%
 
       - name: Package

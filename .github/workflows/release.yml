@@ -75,7 +75,9 @@ jobs:
       - name: Install LLVM 18 + cmake + ninja (x86_64 via Rosetta)
         if: matrix.arch == 'x86_64'
         run: |
-          # macos-14 ships with x86_64 Homebrew at /usr/local
+          softwareupdate --install-rosetta --agree-to-license 2>/dev/null || true
+          NONINTERACTIVE=1 arch -x86_64 /bin/bash -c \
+            "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           arch -x86_64 /usr/local/bin/brew install llvm@18 cmake ninja
           echo "LLVM_PATH=$(arch -x86_64 /usr/local/bin/brew --prefix llvm@18)" >> $GITHUB_ENV
 

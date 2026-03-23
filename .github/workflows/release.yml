@@ -66,10 +66,11 @@ jobs:
 
       - name: Build
         run: |
-          export LLVM_DIR=$(brew --prefix llvm@18)/lib/cmake/llvm
+          LLVM_PREFIX=$(brew --prefix llvm@18)
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_DIR=$LLVM_DIR
+            -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
+            -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm"
           cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
           strip build/ferrumc
 
@@ -90,16 +91,24 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install LLVM 18
+        shell: pwsh
         run: |
-          choco install llvm --version=18.1.8 -y
-          choco install cmake ninja -y
+          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/LLVM-18.1.8-win64.exe"
+          $out = "$env:TEMP\llvm18.exe"
+          Invoke-WebRequest -Uri $url -OutFile $out
+          Start-Process -FilePath $out -ArgumentList "/S" -Wait
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cmake + ninja
+        run: choco install cmake ninja -y --no-progress
 
       - name: Build
         shell: cmd
         run: |
-          set PATH=C:\Program Files\LLVM\bin;%PATH%
           cmake -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER="C:\Program Files\LLVM\bin\clang.exe" ^
+            -DCMAKE_CXX_COMPILER="C:\Program Files\LLVM\bin\clang++.exe" ^
             -DLLVM_DIR="C:\Program Files\LLVM\lib\cmake\llvm"
           cmake --build build --target ferrumc -j%NUMBER_OF_PROCESSORS%
 

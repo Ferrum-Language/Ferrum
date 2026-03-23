@@ -51,26 +51,33 @@ jobs:
   build-macos:
     name: macOS (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.optional }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - arch: x86_64
             runner: macos-13
+            optional: true    # Intel runners are being phased out
           - arch: arm64
             runner: macos-14
+            optional: false
     steps:
       - uses: actions/checkout@v4
 
       - name: Install LLVM 18
-        run: brew install llvm@18 cmake ninja
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
+
+      - name: Install cmake + ninja
+        run: brew install cmake ninja
 
       - name: Build
         run: |
-          LLVM_PREFIX=$(brew --prefix llvm@18)
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
-            -DLLVM_DIR="$LLVM_PREFIX/lib/cmake/llvm" \
+            -DLLVM_DIR="${{ env.LLVM_PATH }}/lib/cmake/llvm" \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE
           cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
           strip build/ferrumc
@@ -91,40 +98,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install LLVM 18
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18"
+
       - name: Install cmake + ninja
         run: choco install cmake ninja -y --no-progress
-
-      - name: Install LLVM 18 (full dev package with cmake files)
-        shell: pwsh
-        run: |
-          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/LLVM-18.1.8-win64.exe"
-          $out = "$env:TEMP\llvm18.exe"
-          Write-Host "Downloading LLVM 18.1.8..."
-          Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
-          Write-Host "Installing to C:\LLVM18..."
-          Start-Process -FilePath $out -ArgumentList "/S", "/D=C:\LLVM18" -Wait
-          Write-Host "Install finished. Searching for LLVMConfig.cmake..."
-          $cfg = Get-ChildItem -Path "C:\LLVM18" -Recurse -Filter "LLVMConfig.cmake" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $cfg) {
-            # Some versions place cmake files under lib\cmake\llvm without a subdir
-            Write-Host "Not found under C:\LLVM18, listing top-level dirs:"
-            Get-ChildItem "C:\LLVM18" | Select-Object Name | Format-Table
-            Write-Error "LLVMConfig.cmake not found after installation"; exit 1
-          }
-          $dir = $cfg.DirectoryName
-          $binDir = "C:\LLVM18\bin"
-          Write-Host "Found cmake dir: $dir"
-          echo "LLVM_CMAKE_DIR=$dir" >> $env:GITHUB_ENV
-          echo "$binDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build
         shell: cmd
         run: |
           cmake -B build -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_C_COMPILER="C:\LLVM18\bin\clang.exe" ^
-            -DCMAKE_CXX_COMPILER="C:\LLVM18\bin\clang++.exe" ^
-            -DLLVM_DIR="%LLVM_CMAKE_DIR%"
+            -DCMAKE_C_COMPILER="%LLVM_PATH%\bin\clang.exe" ^
+            -DCMAKE_CXX_COMPILER="%LLVM_PATH%\bin\clang++.exe" ^
+            -DLLVM_DIR="%LLVM_PATH%\lib\cmake\llvm"
           cmake --build build --target ferrumc -j%NUMBER_OF_PROCESSORS%
 
       - name: Package

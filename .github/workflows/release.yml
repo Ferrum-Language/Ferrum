@@ -94,11 +94,11 @@ jobs:
       - name: Build (x86_64 via Rosetta)
         if: matrix.arch == 'x86_64'
         run: |
-          arch -x86_64 cmake -B build -G Ninja \
+          arch -x86_64 /usr/local/bin/cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR="${{ env.LLVM_PATH }}/lib/cmake/llvm" \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE
-          arch -x86_64 cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
+          arch -x86_64 /usr/local/bin/cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
           strip build/ferrumc
 
       - name: Package

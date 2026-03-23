@@ -38,6 +38,7 @@ struct VarState {
     // For borrow variables: which variable they borrow from and at which scope level
     std::string borrowsFrom;
     int borrowedScopeLevel = -1;
+    bool isMutBorrow     = false;   // true if this variable is a &mut borrow reference
     bool isUnsafePtr     = false;   // declared with 'unsafe' qualifier
 };
 

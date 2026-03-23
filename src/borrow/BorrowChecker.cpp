@@ -32,6 +32,10 @@ void BorrowChecker::popScope() {
                 }
             }
         }
+        // Release any borrow this variable holds on another variable
+        if (!state.borrowsFrom.empty()) {
+            releaseBorrow(state.borrowsFrom, state.isMutBorrow);
+        }
     }
 
     scopes.pop_back();
@@ -178,8 +182,10 @@ void BorrowChecker::checkStmt(const Stmt& stmt) {
 
             // Track borrow: if init is &x or &mut x, record borrowsFrom
             std::string borrowTarget;
+            bool borrowIsMut = false;
             if (stmt.varInit->kind == Expr::Kind::Borrow ||
                 stmt.varInit->kind == Expr::Kind::BorrowMut) {
+                borrowIsMut = (stmt.varInit->kind == Expr::Kind::BorrowMut);
                 if (stmt.varInit->inner &&
                     stmt.varInit->inner->kind == Expr::Kind::Ident) {
                     borrowTarget = stmt.varInit->inner->name;
@@ -193,8 +199,9 @@ void BorrowChecker::checkStmt(const Stmt& stmt) {
                 VarState* bs = lookupVar(borrowTarget);
                 if (bs) {
                     // Will be registered in recordBorrow; also set on the new var after declare
-                    s.borrowsFrom       = borrowTarget;
+                    s.borrowsFrom        = borrowTarget;
                     s.borrowedScopeLevel = bs->scopeLevel;
+                    s.isMutBorrow        = borrowIsMut;
                 }
             }
         }

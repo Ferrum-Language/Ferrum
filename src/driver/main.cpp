@@ -10,6 +10,19 @@
 #include <string>
 #include <cstdlib>   // system()
 #include <filesystem>
+#include <unistd.h>  // getpid()
+
+// Shell-quote a path to prevent command injection: wraps in single quotes
+// and escapes any single quotes within the path.
+static std::string shellQuote(const std::string& s) {
+    std::string result = "'";
+    for (char c : s) {
+        if (c == '\'') result += "'\\''";
+        else           result += c;
+    }
+    result += "'";
+    return result;
+}
 
 // ─── Error printing ───────────────────────────────────────────────────────────
 
@@ -99,8 +112,9 @@ static int runFile(const std::string& path, bool emitIR, const std::string& outp
             return 0;
         }
 
-        // Write IR to a temp file
-        std::string irPath = "/tmp/ferrum_" + moduleName + ".ll";
+        // Write IR to a temp file (include PID to avoid collisions in shared environments)
+        std::string pid      = std::to_string(getpid());
+        std::string irPath   = "/tmp/ferrum_" + moduleName + "_" + pid + ".ll";
         if (!cg.writeIR(irPath)) {
             std::cerr << "Failed to write IR to " << irPath << "\n";
             return 1;
@@ -108,12 +122,13 @@ static int runFile(const std::string& path, bool emitIR, const std::string& outp
 
         // ── 6. Compile IR → binary using llc + gcc ────────────────────────────
         std::string outPath = outputBin.empty() ? ("./" + moduleName) : outputBin;
-        std::string objPath = "/tmp/ferrum_" + moduleName + ".o";
+        std::string objPath = "/tmp/ferrum_" + moduleName + "_" + pid + ".o";
 
         // Try clang first, fall back to llc + gcc
-        std::string clangCmd = "clang " + irPath + " -o " + outPath + " -lm 2>/dev/null";
-        std::string llcCmd   = "llc -filetype=obj -relocation-model=pic " + irPath + " -o " + objPath + " 2>&1";
-        std::string gccCmd   = "gcc -fPIE " + objPath + " -o " + outPath + " -lm 2>&1";
+        // Paths are shell-quoted to prevent command injection
+        std::string clangCmd = "clang " + shellQuote(irPath) + " -o " + shellQuote(outPath) + " -lm 2>/dev/null";
+        std::string llcCmd   = "llc -filetype=obj -relocation-model=pic " + shellQuote(irPath) + " -o " + shellQuote(objPath) + " 2>&1";
+        std::string gccCmd   = "gcc -fPIE " + shellQuote(objPath) + " -o " + shellQuote(outPath) + " -lm 2>&1";
 
         int ret = std::system(clangCmd.c_str());
         if (ret != 0) {

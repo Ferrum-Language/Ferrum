@@ -124,11 +124,26 @@ Token Lexer::lexString() {
 
 Token Lexer::lexChar() {
     int startLine = line, startCol = col;
+    if (isAtEnd())
+        return Token(TokenKind::ERROR, "unterminated char literal", startLine, startCol);
     char c = advance();
-    if (c == '\\') c = advance();
+    if (c == '\\') {
+        if (isAtEnd())
+            return Token(TokenKind::ERROR, "unterminated char literal", startLine, startCol);
+        char esc = advance();
+        switch (esc) {
+            case 'n':  c = '\n'; break;
+            case 't':  c = '\t'; break;
+            case 'r':  c = '\r'; break;
+            case '0':  c = '\0'; break;
+            case '\\': c = '\\'; break;
+            case '\'': c = '\''; break;
+            default:   c = esc;  break;
+        }
+    }
     if (peek() != '\'')
         return Token(TokenKind::ERROR, "unterminated char literal", startLine, startCol);
-    advance();
+    advance(); // closing '
     Token tok(TokenKind::CHAR_LIT, std::string(1, c), startLine, startCol);
     tok.value = (long long)c;
     return tok;
@@ -183,16 +198,22 @@ std::vector<Token> Lexer::tokenize() {
             case '~': tokens.push_back(makeToken(TokenKind::TILDE,    "~")); break;
             case '^': tokens.push_back(makeToken(TokenKind::CARET,    "^")); break;
             case '%': tokens.push_back(makeToken(TokenKind::PERCENT,  "%")); break;
-            case '+': tokens.push_back(makeToken(match('=') ? TokenKind::PLUS_EQ  : TokenKind::PLUS,  match('=') ? "+=" : "+")); break;
-            case '-': tokens.push_back(makeToken(match('>') ? TokenKind::ARROW    : match('=') ? TokenKind::MINUS_EQ : TokenKind::MINUS, "-")); break;
-            case '*': tokens.push_back(makeToken(match('=') ? TokenKind::STAR_EQ  : TokenKind::STAR,  "*")); break;
-            case '/': tokens.push_back(makeToken(match('=') ? TokenKind::SLASH_EQ : TokenKind::SLASH, "/")); break;
-            case '!': tokens.push_back(makeToken(match('=') ? TokenKind::BANG_EQ  : TokenKind::BANG,  match('=') ? "!=" : "!")); break;
-            case '=': tokens.push_back(makeToken(match('=') ? TokenKind::EQ_EQ    : TokenKind::EQ,    match('=') ? "==" : "=")); break;
-            case '<': tokens.push_back(makeToken(match('=') ? TokenKind::LT_EQ    : TokenKind::LT,    match('=') ? "<=" : "<")); break;
-            case '>': tokens.push_back(makeToken(match('=') ? TokenKind::GT_EQ    : TokenKind::GT,    match('=') ? ">=" : ">")); break;
+            case '+': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::PLUS_EQ  : TokenKind::PLUS,  eq ? "+=" : "+",  startLine, startCol)); break; }
+            case '-': {
+                if      (match('>')) tokens.push_back(Token(TokenKind::ARROW,    "->", startLine, startCol));
+                else if (match('=')) tokens.push_back(Token(TokenKind::MINUS_EQ, "-=", startLine, startCol));
+                else                 tokens.push_back(Token(TokenKind::MINUS,    "-",  startLine, startCol));
+                break;
+            }
+            case '*': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::STAR_EQ  : TokenKind::STAR,  eq ? "*=" : "*",  startLine, startCol)); break; }
+            case '/': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::SLASH_EQ : TokenKind::SLASH, eq ? "/=" : "/",  startLine, startCol)); break; }
+            case '!': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::BANG_EQ  : TokenKind::BANG,  eq ? "!=" : "!",  startLine, startCol)); break; }
+            case '=': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::EQ_EQ    : TokenKind::EQ,    eq ? "==" : "=",  startLine, startCol)); break; }
+            case '<': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::LT_EQ    : TokenKind::LT,    eq ? "<=" : "<",  startLine, startCol)); break; }
+            case '>': { bool eq = match('='); tokens.push_back(Token(eq ? TokenKind::GT_EQ    : TokenKind::GT,    eq ? ">=" : ">",  startLine, startCol)); break; }
             case '&':
-                if (peek() == 'm' && src.substr(pos, 3) == "mut") {
+                if (peek() == 'm' && src.substr(pos, 3) == "mut" &&
+                    (pos + 3 >= src.size() || !isAlphaNum(src[pos + 3]))) {
                     pos += 3; col += 3;
                     tokens.push_back(Token(TokenKind::AMP_MUT, "&mut", startLine, startCol));
                 } else if (match('&')) {
@@ -201,9 +222,7 @@ std::vector<Token> Lexer::tokenize() {
                     tokens.push_back(Token(TokenKind::AMP, "&", startLine, startCol));
                 }
                 break;
-            case '|':
-                tokens.push_back(makeToken(match('|') ? TokenKind::PIPE_PIPE : TokenKind::PIPE, "|"));
-                break;
+            case '|': { bool pp = match('|'); tokens.push_back(Token(pp ? TokenKind::PIPE_PIPE : TokenKind::PIPE, pp ? "||" : "|", startLine, startCol)); break; }
             case '"': tokens.push_back(lexString()); break;
             case '\'': {
                 // Lifetime 'a or char literal 'x'

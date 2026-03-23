@@ -8,6 +8,7 @@
 
 #include <sstream>
 #include <stdexcept>
+#include <climits>
 
 namespace ferrum {
 
@@ -463,7 +464,12 @@ void Codegen::genStmt(const Stmt& stmt, llvm::Function* func) {
 llvm::Value* Codegen::genExpr(const Expr& expr, llvm::Function* func) {
     switch (expr.kind) {
     case Expr::Kind::IntLit:
-        return llvm::ConstantInt::get(i32Ty(), expr.intVal);
+        // Warn if the literal doesn't fit in i32 — it will be silently truncated.
+        if (expr.intVal > INT32_MAX || expr.intVal < INT32_MIN)
+            addError(expr.line,
+                     "integer literal " + std::to_string(expr.intVal) +
+                     " overflows int (i32); use an explicit cast if intentional");
+        return llvm::ConstantInt::get(i32Ty(), (uint64_t)(int32_t)expr.intVal, /*isSigned=*/true);
 
     case Expr::Kind::FloatLit:
         return llvm::ConstantFP::get(f64Ty(), expr.floatVal);

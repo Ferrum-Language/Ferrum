@@ -12,6 +12,28 @@
 #include <filesystem>
 #include <unistd.h>  // getpid()
 
+// Sanitize a module name for use in temp file paths: replace every character
+// that is not alphanumeric or '_' with '_' to prevent path traversal.
+static std::string sanitizeModuleName(const std::string& name) {
+    std::string out;
+    out.reserve(name.size());
+    for (unsigned char c : name)
+        out += (std::isalnum(c) || c == '_') ? (char)c : '_';
+    // Prevent an all-underscore name from colliding with system names.
+    if (out.empty() || out == "_") out = "module";
+    return out;
+}
+
+// Reject writes to sensitive system directories.
+static bool isSafeOutputPath(const std::string& p) {
+    static const char* const dangerous[] = {
+        "/proc/", "/sys/", "/dev/", "/etc/", "/boot/", "/run/", "/sbin/"
+    };
+    for (auto prefix : dangerous)
+        if (p.rfind(prefix, 0) == 0) return false;
+    return true;
+}
+
 // Shell-quote a path to prevent command injection: wraps in single quotes
 // and escapes any single quotes within the path.
 static std::string shellQuote(const std::string& s) {
@@ -147,8 +169,9 @@ static int runFile(const std::string& path, bool emitIR, const std::string& outp
 
         // Write IR to a temp file (include PID to avoid collisions in shared environments)
         std::string pid      = std::to_string(getpid());
-        std::string irPath   = "/tmp/ferrum_" + moduleName + "_" + pid + ".ll";
-        std::string objPath  = "/tmp/ferrum_" + moduleName + "_" + pid + ".o";
+        std::string safeBase = sanitizeModuleName(moduleName);
+        std::string irPath   = "/tmp/ferrum_" + safeBase + "_" + pid + ".ll";
+        std::string objPath  = "/tmp/ferrum_" + safeBase + "_" + pid + ".o";
 
         // Temp files are deleted on scope exit regardless of success or failure.
         TempFileGuard tempGuard;
@@ -160,8 +183,24 @@ static int runFile(const std::string& path, bool emitIR, const std::string& outp
             return 1;
         }
 
+        // Restrict temp IR file to owner-only (rw-------) to prevent other
+        // local users from reading potentially sensitive IR.
+        {
+            std::error_code ec;
+            std::filesystem::permissions(irPath,
+                std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+                std::filesystem::perm_options::replace, ec);
+            // Non-fatal: best-effort hardening.
+        }
+
         // ── 6. Compile IR → binary using llc + gcc ────────────────────────────
         std::string outPath = outputBin.empty() ? ("./" + moduleName) : outputBin;
+
+        // Reject writes to sensitive system directories.
+        if (!isSafeOutputPath(std::filesystem::absolute(outPath).string())) {
+            std::cerr << "error: output path '" << outPath << "' is not allowed\n";
+            return 1;
+        }
 
         // Try clang first, fall back to llc + gcc
         // Paths are shell-quoted to prevent command injection

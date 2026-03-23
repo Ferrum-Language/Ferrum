@@ -118,6 +118,19 @@ bool TypeChecker::typesCompatible(const FerType& a, const FerType& b) const {
     return a.kind == b.kind;
 }
 
+// ─── Import path validation ───────────────────────────────────────────────────
+
+// Returns true if the import path looks like a legitimate C/C++ header.
+// Blocks path traversal attempts (../) and non-printable characters.
+static bool isValidHeaderPath(const std::string& path) {
+    if (path.empty() || path.size() > 256) return false;
+    if (path.find("..") != std::string::npos) return false;
+    if (path.find('\0') != std::string::npos) return false;
+    for (unsigned char c : path)
+        if (!std::isprint(c)) return false;
+    return true;
+}
+
 // ─── Known C library functions ────────────────────────────────────────────────
 
 void TypeChecker::registerCHeader(const std::string& header) {
@@ -192,7 +205,11 @@ void TypeChecker::collectDecl(const Decl& decl) {
         break;
     }
     case Decl::Kind::Import:
-        registerCHeader(decl.importPath);
+        if (!isValidHeaderPath(decl.importPath))
+            addError(decl.line, "invalid import path '" + decl.importPath +
+                     "' (path traversal or non-printable characters not allowed)");
+        else
+            registerCHeader(decl.importPath);
         break;
     case Decl::Kind::ExternBlock:
         for (auto& d : decl.externDecls) collectDecl(*d);

@@ -47,9 +47,18 @@ ParseError Parser::error(const std::string& msg) {
 
 // ── Program ───────────────────────────────────────────────────────────────────
 
+// Hard limits to prevent memory exhaustion from malicious input.
+static constexpr size_t MAX_DECLS      = 5000;
+static constexpr size_t MAX_PARAMS     = 256;
+static constexpr size_t MAX_FIELDS     = 256;
+static constexpr size_t MAX_CALL_ARGS  = 256;
+static constexpr size_t MAX_BLOCK_STMTS= 10000;
+
 Program Parser::parse() {
     Program prog;
     while (!isAtEnd()) {
+        if (prog.decls.size() >= MAX_DECLS)
+            throw error("too many top-level declarations (max 5000)");
         prog.decls.push_back(parseDecl());
     }
     return prog;
@@ -87,6 +96,8 @@ DeclPtr Parser::parseFunctionDecl() {
 
     expect(TokenKind::LPAREN, "Expected '(' after function name");
     while (!check(TokenKind::RPAREN) && !isAtEnd()) {
+        if (decl->params.size() >= MAX_PARAMS)
+            throw error("too many parameters (max 256)");
         Param p;
         p.type = parseType();
         p.name = expect(TokenKind::IDENT, "Expected parameter name").lexeme;
@@ -120,6 +131,8 @@ DeclPtr Parser::parseStructDecl() {
     expect(TokenKind::LBRACE, "Expected '{' after struct name");
 
     while (!check(TokenKind::RBRACE) && !isAtEnd()) {
+        if (decl->fields.size() >= MAX_FIELDS)
+            throw error("too many struct fields (max 256)");
         Param f;
         f.type = parseType();
         f.name = expect(TokenKind::IDENT, "Expected field name").lexeme;
@@ -304,6 +317,8 @@ StmtPtr Parser::parseBlock() {
     stmt->line = peek().line;
     expect(TokenKind::LBRACE, "Expected '{'");
     while (!check(TokenKind::RBRACE) && !isAtEnd()) {
+        if (stmt->stmts.size() >= MAX_BLOCK_STMTS)
+            throw error("too many statements in block (max 10000)");
         stmt->stmts.push_back(parseStmt());
     }
     expect(TokenKind::RBRACE, "Expected '}'");
@@ -621,6 +636,8 @@ ExprPtr Parser::parsePostfix() {
                 callee->field = field;
                 e->callee = std::move(callee);
                 while (!check(TokenKind::RPAREN) && !isAtEnd()) {
+                    if (e->args.size() >= MAX_CALL_ARGS)
+                        throw error("too many arguments in call (max 256)");
                     e->args.push_back(parseExpr());
                     if (!check(TokenKind::RPAREN)) expect(TokenKind::COMMA, "Expected ','");
                 }
@@ -647,6 +664,8 @@ ExprPtr Parser::parsePostfix() {
             e->kind = Expr::Kind::Call;
             e->callee = std::move(expr);
             while (!check(TokenKind::RPAREN) && !isAtEnd()) {
+                if (e->args.size() >= MAX_CALL_ARGS)
+                    throw error("too many arguments in call (max 256)");
                 e->args.push_back(parseExpr());
                 if (!check(TokenKind::RPAREN)) expect(TokenKind::COMMA, "Expected ','");
             }

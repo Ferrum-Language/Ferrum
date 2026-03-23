@@ -103,10 +103,16 @@ Token Lexer::lexNumber() {
     return tok;
 }
 
+// Maximum length of a single string literal (64 KiB).
+static constexpr size_t MAX_STRING_LIT_LEN = 65536;
+
 Token Lexer::lexString() {
     int startLine = line, startCol = col;
     std::string result;
     while (!isAtEnd() && peek() != '"') {
+        if (result.size() >= MAX_STRING_LIT_LEN)
+            return Token(TokenKind::ERROR,
+                         "string literal too long (max 64 KiB)", startLine, startCol);
         char c = advance();
         if (c == '\\') {
             char esc = advance();
@@ -167,13 +173,19 @@ Token Lexer::lexLifetime(int startLine, int startCol) {
     return tok;
 }
 
+// Maximum length of an identifier or keyword.
+static constexpr size_t MAX_IDENT_LEN = 255;
+
 Token Lexer::lexIdent() {
     size_t start = pos - 1;
     int startLine = line, startCol = col;
     while (!isAtEnd() && isAlphaNum(peek())) advance();
     std::string lex = src.substr(start, pos - start);
 
-    // Check for &mut
+    if (lex.size() > MAX_IDENT_LEN)
+        return Token(TokenKind::ERROR,
+                     "identifier too long (max 255 chars)", startLine, startCol);
+
     auto it = keywords.find(lex);
     TokenKind kind = (it != keywords.end()) ? it->second : TokenKind::IDENT;
     return Token(kind, lex, startLine, startCol);

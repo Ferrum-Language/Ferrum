@@ -106,26 +106,24 @@ jobs:
       - name: Install cmake + ninja
         run: choco install cmake ninja -y --no-progress
 
-      - name: Locate LLVM cmake dir via llvm-config
+      - name: Diagnose LLVM layout and locate cmake dir
         shell: pwsh
         run: |
-          $llvmConfig = "$env:LLVM_PATH\bin\llvm-config.exe"
-          if (Test-Path $llvmConfig) {
-            $cmakeDir = & $llvmConfig --cmakedir
-            Write-Host "llvm-config --cmakedir = $cmakeDir"
-            echo "LLVM_CMAKE_DIR=$cmakeDir" >> $env:GITHUB_ENV
+          Write-Host "=== LLVM_PATH contents ==="
+          if (Test-Path $env:LLVM_PATH) {
+            Get-ChildItem $env:LLVM_PATH | Select-Object Name, LastWriteTime | Format-Table
+          }
+          Write-Host "=== Searching for LLVMConfig.cmake on C:\ ==="
+          $results = Get-ChildItem -Path "C:\" -Recurse -Filter "LLVMConfig.cmake" -ErrorAction SilentlyContinue
+          $results | Select-Object FullName | Format-List
+          if ($results.Count -eq 0) { Write-Host "NOT FOUND ANYWHERE on C:\" }
+          # Use first result found
+          $cfg = $results | Select-Object -First 1
+          if ($cfg) {
+            Write-Host "Using: $($cfg.FullName)"
+            echo "LLVM_CMAKE_DIR=$($cfg.DirectoryName)" >> $env:GITHUB_ENV
           } else {
-            # Fallback: search for LLVMConfig.cmake under VS LLVM
-            $vsWhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-            $vsPath = & $vsWhere -latest -property installationPath 2>$null
-            $vsLlvm = "$vsPath\VC\Tools\Llvm\x64\lib\cmake\llvm"
-            if (Test-Path "$vsLlvm\LLVMConfig.cmake") {
-              Write-Host "Using VS LLVM cmake dir: $vsLlvm"
-              echo "LLVM_CMAKE_DIR=$vsLlvm" >> $env:GITHUB_ENV
-              echo "$vsPath\VC\Tools\Llvm\x64\bin" >> $env:GITHUB_PATH
-            } else {
-              Write-Error "Cannot find LLVMConfig.cmake"; exit 1
-            }
+            Write-Error "LLVMConfig.cmake not found on this runner"; exit 1
           }
 
       - name: Build

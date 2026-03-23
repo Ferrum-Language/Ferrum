@@ -51,17 +51,16 @@ jobs:
   build-macos:
     name: macOS (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.optional }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
-            runner: macos-13
-            optional: true    # Intel runners are being phased out
           - arch: arm64
             runner: macos-14
-            optional: false
+            cmake_arch: arm64
+          - arch: x86_64
+            runner: macos-14
+            cmake_arch: x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -78,7 +77,8 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR="${{ env.LLVM_PATH }}/lib/cmake/llvm" \
-            -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE
+            -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }}
           cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
           strip build/ferrumc
 
@@ -161,12 +161,7 @@ jobs:
     name: Create Release
     needs: [build-linux, build-macos, build-windows, build-freebsd]
     runs-on: ubuntu-22.04
-    if: |
-      always() &&
-      needs.build-linux.result == 'success' &&
-      needs.build-windows.result == 'success' &&
-      needs.build-freebsd.result == 'success' &&
-      (needs.build-macos.result == 'success' || needs.build-macos.result == 'cancelled' || needs.build-macos.result == 'failure')
+    if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -196,7 +191,7 @@ jobs:
             |----------|-------------|------|
             | Linux | x86_64 | `ferrumc-*-linux-x86_64.tar.gz` |
             | Linux | aarch64 | `ferrumc-*-linux-aarch64.tar.gz` |
-            | macOS | x86_64 (Intel) | `ferrumc-*-macos-x86_64.tar.gz` |
+            | macOS | x86_64 (Intel, cross-compiled) | `ferrumc-*-macos-x86_64.tar.gz` |
             | macOS | arm64 (Apple Silicon) | `ferrumc-*-macos-arm64.tar.gz` |
             | Windows | x86_64 | `ferrumc-*-windows-x86_64.zip` |
             | FreeBSD | x86_64 | `ferrumc-*-freebsd-x86_64.tar.gz` |

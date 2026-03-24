@@ -1,5 +1,6 @@
 #include "ferrum/TypeChecker.h"
 #include <sstream>
+#include <climits>
 
 namespace ferrum {
 
@@ -148,8 +149,13 @@ void TypeChecker::registerCHeader(const std::string& header) {
         printf_info.isExtern   = true;
         functions["printf"]  = printf_info;
         functions["fprintf"] = printf_info;
-        functions["scanf"]   = printf_info;
         functions["puts"] = {{{ptrChr}}, intTy, {}, false, true};
+        // 'gets' is unconditionally unsafe: it cannot be used without risking
+        // a buffer overflow. Block it at the type-checker level.
+        blockedFunctions.insert("gets");
+        // 'scanf' and 'sprintf' are dangerous without format string hardening.
+        warnFunctions.insert("scanf");
+        warnFunctions.insert("sprintf");
     }
     if (header == "stdlib.h" || header == "cstdlib") {
         functions["malloc"] = {{{intTy}}, ptrVoid, {}, false, true};
@@ -161,8 +167,12 @@ void TypeChecker::registerCHeader(const std::string& header) {
         functions["strlen"] = {{{ptrChr}}, intTy, {}, false, true};
         functions["strcmp"] = {{{ptrChr, ptrChr}}, intTy, {}, false, true};
         functions["strcpy"] = {{{ptrChr, ptrChr}}, ptrChr, {}, false, true};
+        functions["strcat"] = {{{ptrChr, ptrChr}}, ptrChr, {}, false, true};
         functions["memcpy"] = {{{ptrVoid, ptrVoid, intTy}}, ptrVoid, {}, false, true};
         functions["memset"] = {{{ptrVoid, intTy, intTy}}, ptrVoid, {}, false, true};
+        // 'strcpy' and 'strcat' have no bounds checking — flag them.
+        warnFunctions.insert("strcpy");
+        warnFunctions.insert("strcat");
     }
     if (header == "math.h" || header == "cmath") {
         auto fltTy = FerType::makeFloat();
@@ -223,7 +233,14 @@ std::shared_ptr<FerType> TypeChecker::checkExpr(Expr& expr) {
     std::shared_ptr<FerType> result;
 
     switch (expr.kind) {
-    case Expr::Kind::IntLit:    result = FerType::makeInt();   break;
+    case Expr::Kind::IntLit:
+        // Warn if the literal doesn't fit in a 32-bit signed integer.
+        if (expr.intVal > INT32_MAX || expr.intVal < INT32_MIN)
+            addError(expr.line, "integer literal " + std::to_string(expr.intVal) +
+                " overflows 'int' (valid range: " +
+                std::to_string(INT32_MIN) + " to " + std::to_string(INT32_MAX) + ")");
+        result = FerType::makeInt();
+        break;
     case Expr::Kind::FloatLit:  result = FerType::makeFloat(); break;
     case Expr::Kind::BoolLit:   result = FerType::makeBool();  break;
     case Expr::Kind::NullLit:   result = FerType::makePtr(FerType::makeVoid()); break;
@@ -238,6 +255,10 @@ std::shared_ptr<FerType> TypeChecker::checkExpr(Expr& expr) {
         auto lTy = expr.lhs ? checkExpr(*expr.lhs) : FerType::makeInt();
         auto rTy = expr.rhs ? checkExpr(*expr.rhs) : FerType::makeInt();
         const std::string& op = expr.op;
+        // Static division-by-zero detection.
+        if ((op == "/" || op == "%") && expr.rhs &&
+            expr.rhs->kind == Expr::Kind::IntLit && expr.rhs->intVal == 0)
+            addError(expr.line, "division by zero");
         if (op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=") {
             if (!typesCompatible(*lTy, *rTy))
                 addError(expr.line, "type mismatch in comparison: " + lTy->toString() + " vs " + rTy->toString());
@@ -309,6 +330,21 @@ std::shared_ptr<FerType> TypeChecker::checkExpr(Expr& expr) {
             funcName = expr.callee->field;
         } else if (expr.callee) {
             checkExpr(*expr.callee);
+        }
+
+        // Reject calls to explicitly blocked functions (no safe use exists).
+        if (!funcName.empty() && blockedFunctions.count(funcName)) {
+            addError(expr.line, "use of forbidden function '" + funcName +
+                "': this function is inherently unsafe and has no safe variant "
+                "(use fgets() instead)");
+            result = FerType::makeVoid();
+            break;
+        }
+        // Warn about dangerous functions that are prone to buffer overflows.
+        if (!funcName.empty() && warnFunctions.count(funcName)) {
+            addError(expr.line, "[warning] '" + funcName +
+                "' is unsafe: prefer a bounds-checked alternative "
+                "(e.g. strncpy/strncat/snprintf/fgets)");
         }
 
         // Check args

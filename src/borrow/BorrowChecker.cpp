@@ -131,6 +131,12 @@ void BorrowChecker::releaseBorrow(const std::string& name, bool isMut) {
 // ─── Top-level check ──────────────────────────────────────────────────────────
 
 void BorrowChecker::check(const Program& prog) {
+    // Pre-pass: collect names of functions declared 'unsafe fn'.
+    // This allows forward references — main() can call unsafe foo() declared later.
+    for (auto& d : prog.decls) {
+        if (d->kind == Decl::Kind::Function && d->isUnsafe)
+            unsafeFunctions.insert(d->funcName);
+    }
     for (auto& d : prog.decls) checkDecl(*d);
 }
 
@@ -324,6 +330,17 @@ void BorrowChecker::checkExpr(const Expr& expr) {
     case Expr::Kind::Call:
         if (expr.callee) checkExpr(*expr.callee);
         for (auto& a : expr.args) checkExpr(*a);
+        // Calling an 'unsafe fn' outside an unsafe block is an error.
+        if (!inUnsafe() && expr.callee) {
+            std::string funcName;
+            if (expr.callee->kind == Expr::Kind::Ident)
+                funcName = expr.callee->name;
+            if (!funcName.empty() && unsafeFunctions.count(funcName)) {
+                addError(BorrowError::Kind::UnsafeOutsideUnsafeBlock, funcName, expr.line,
+                    "call to unsafe function '" + funcName +
+                    "' requires an unsafe block");
+            }
+        }
         break;
 
     case Expr::Kind::BinOp:

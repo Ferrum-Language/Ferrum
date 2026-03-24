@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <stdexcept>
 
 namespace ferrum {
@@ -56,6 +57,9 @@ private:
 
     int currentScopeLevel = 0;
     int unsafeDepth       = 0;   // > 0 means inside an unsafe block
+
+    // Functions declared as 'unsafe fn' — calling them requires an unsafe block.
+    std::unordered_set<std::string> unsafeFunctions;
 
     bool inUnsafe() const { return unsafeDepth > 0; }
 

@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace ferrum {
 
@@ -97,6 +98,11 @@ private:
 
     // Expression → resolved type (for Codegen)
     std::unordered_map<const Expr*, std::shared_ptr<FerType>> exprTypes;
+
+    // C functions that are completely forbidden (e.g. gets — no safe use exists).
+    std::unordered_set<std::string> blockedFunctions;
+    // C functions that are dangerous and should produce a compile-time warning.
+    std::unordered_set<std::string> warnFunctions;
 
     void pushScope();
     void popScope();

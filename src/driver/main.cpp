@@ -294,7 +294,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (inputFile.empty()) {
-        std::cerr << "Usage: ferrumc <file.fe> [--emit-ir] [-o output]\n";
+        std::cerr << "Usage: ferrum <file.fe> [--emit-ir] [-o output]\n";
         return 1;
     }
 

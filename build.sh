@@ -16,9 +16,9 @@ LDFLAGS="${LLVM_LDFLAGS} ${LLVM_LIBS} ${LLVM_SYSLIBS}"
 
 mkdir -p build
 
-echo "Building ferrumc..."
-$CXX $CXXFLAGS $SOURCES src/driver/main.cpp -o build/ferrumc $LDFLAGS -lstdc++fs
-echo "✓ build/ferrumc"
+echo "Building ferrum..."
+$CXX $CXXFLAGS $SOURCES src/driver/main.cpp -o build/ferrum $LDFLAGS -lstdc++fs
+echo "✓ build/ferrum"
 
 echo "Building tests..."
 $CXX $CXXFLAGS $SOURCES tests/test_lexer.cpp  -o build/test_lexer  $LDFLAGS
@@ -32,6 +32,6 @@ echo "Running tests..."
 ./build/test_borrow
 
 echo ""
-echo "Done! Use: ./build/ferrumc <file.fe>"
-echo "       Or: ./build/ferrumc <file.fe> --emit-ir   (print LLVM IR)"
-echo "       Or: ./build/ferrumc <file.fe> -o output   (compile to binary)"
+echo "Done! Use: ./build/ferrum <file.fe>"
+echo "       Or: ./build/ferrum <file.fe> --emit-ir   (print LLVM IR)"
+echo "       Or: ./build/ferrum <file.fe> -o output   (compile to binary)"

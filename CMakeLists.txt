@@ -81,8 +81,8 @@ target_include_directories(ferrum_core PUBLIC include ${LLVM_INCLUDE_DIRS})
 target_link_libraries(ferrum_core ${llvm_libs})
 
 # ─── Compiler driver ──────────────────────────────────────────────────────────
-add_executable(ferrumc src/driver/main.cpp)
-target_link_libraries(ferrumc ferrum_core)
+add_executable(ferrum src/driver/main.cpp)
+target_link_libraries(ferrum ferrum_core)
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 enable_testing()

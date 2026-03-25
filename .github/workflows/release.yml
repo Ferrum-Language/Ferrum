@@ -35,18 +35,18 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR=$(llvm-config-18 --cmakedir)
-          cmake --build build --target ferrumc -j$(nproc)
-          strip build/ferrumc
+          cmake --build build --target ferrum -j$(nproc)
+          strip build/ferrum
 
       - name: Package
         run: |
           TAG=${GITHUB_REF_NAME:-v0.3.0}
-          tar -czf ferrumc-${TAG}-linux-${{ matrix.arch }}.tar.gz -C build ferrumc
+          tar -czf ferrum-${TAG}-linux-${{ matrix.arch }}.tar.gz -C build ferrum
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
-          path: ferrumc-*.tar.gz
+          path: ferrum-*.tar.gz
 
   build-macos:
     name: macOS (${{ matrix.arch }})
@@ -88,8 +88,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR="${{ env.LLVM_PATH }}/lib/cmake/llvm" \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE
-          cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
-          strip build/ferrumc
+          cmake --build build --target ferrum -j$(sysctl -n hw.logicalcpu)
+          strip build/ferrum
 
       - name: Build (x86_64 via Rosetta)
         if: matrix.arch == 'x86_64'
@@ -98,18 +98,18 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR="${{ env.LLVM_PATH }}/lib/cmake/llvm" \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibEdit=TRUE
-          arch -x86_64 /usr/local/bin/cmake --build build --target ferrumc -j$(sysctl -n hw.logicalcpu)
-          strip build/ferrumc
+          arch -x86_64 /usr/local/bin/cmake --build build --target ferrum -j$(sysctl -n hw.logicalcpu)
+          strip build/ferrum
 
       - name: Package
         run: |
           TAG=${GITHUB_REF_NAME:-v0.3.0}
-          tar -czf ferrumc-${TAG}-macos-${{ matrix.arch }}.tar.gz -C build ferrumc
+          tar -czf ferrum-${TAG}-macos-${{ matrix.arch }}.tar.gz -C build ferrum
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
-          path: ferrumc-*.tar.gz
+          path: ferrum-*.tar.gz
 
   build-windows:
     name: Windows x86_64
@@ -134,18 +134,18 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_DIR=/mingw64/lib/cmake/llvm
-          cmake --build build --target ferrumc -j$(nproc)
+          cmake --build build --target ferrum -j$(nproc)
 
       - name: Package
         shell: bash
         run: |
           TAG=${GITHUB_REF_NAME:-v0.3.0}
-          7z a ferrumc-${TAG}-windows-x86_64.zip ./build/ferrumc.exe
+          7z a ferrum-${TAG}-windows-x86_64.zip ./build/ferrum.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64
-          path: ferrumc-*.zip
+          path: ferrum-*.zip
 
   build-freebsd:
     name: FreeBSD x86_64
@@ -163,18 +163,18 @@ jobs:
             cmake -B build -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
               -DLLVM_DIR=/usr/local/llvm18/lib/cmake/llvm
-            cmake --build build --target ferrumc -j$(sysctl -n hw.ncpu)
-            strip build/ferrumc
+            cmake --build build --target ferrum -j$(sysctl -n hw.ncpu)
+            strip build/ferrum
 
       - name: Package
         run: |
           TAG=${GITHUB_REF_NAME:-v0.3.0}
-          tar -czf ferrumc-${TAG}-freebsd-x86_64.tar.gz -C build ferrumc
+          tar -czf ferrum-${TAG}-freebsd-x86_64.tar.gz -C build ferrum
 
       - uses: actions/upload-artifact@v4
         with:
           name: freebsd-x86_64
-          path: ferrumc-*.tar.gz
+          path: ferrum-*.tar.gz
 
   release:
     name: Create Release
@@ -208,19 +208,19 @@ jobs:
 
             | Platform | Architecture | File |
             |----------|-------------|------|
-            | Linux | x86_64 | `ferrumc-*-linux-x86_64.tar.gz` |
-            | Linux | aarch64 | `ferrumc-*-linux-aarch64.tar.gz` |
-            | macOS | x86_64 (Intel, cross-compiled) | `ferrumc-*-macos-x86_64.tar.gz` |
-            | macOS | arm64 (Apple Silicon) | `ferrumc-*-macos-arm64.tar.gz` |
-            | Windows | x86_64 | `ferrumc-*-windows-x86_64.zip` |
-            | FreeBSD | x86_64 | `ferrumc-*-freebsd-x86_64.tar.gz` |
+            | Linux | x86_64 | `ferrum-*-linux-x86_64.tar.gz` |
+            | Linux | aarch64 | `ferrum-*-linux-aarch64.tar.gz` |
+            | macOS | x86_64 (Intel, cross-compiled) | `ferrum-*-macos-x86_64.tar.gz` |
+            | macOS | arm64 (Apple Silicon) | `ferrum-*-macos-arm64.tar.gz` |
+            | Windows | x86_64 | `ferrum-*-windows-x86_64.zip` |
+            | FreeBSD | x86_64 | `ferrum-*-freebsd-x86_64.tar.gz` |
 
             Verify integrity with `SHA256SUMS.txt`.
 
             ### Quick start
             ```bash
-            tar -xzf ferrumc-*-linux-x86_64.tar.gz
-            ./ferrumc hello.fe -o hello
+            tar -xzf ferrum-*-linux-x86_64.tar.gz
+            ./ferrum hello.fe -o hello
             ./hello
             ```
           files: artifacts/*
